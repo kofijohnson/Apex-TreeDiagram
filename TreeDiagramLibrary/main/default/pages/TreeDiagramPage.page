@@ -1,0 +1,197 @@
+<apex:page showHeader="false" sidebar="false">
+    <head>
+        <meta charset="utf-8"/>
+        <title>Tree Diagram</title>
+        <style>
+            .node circle {
+                fill: #fff;
+                stroke: steelblue;
+                stroke-width: 3px;
+            }
+            .node text {
+                font: 10px sans-serif;
+            }
+            .link {
+                fill: none;
+                stroke: #ccc;
+                stroke-width: 2px;
+            }
+            div.tooltip {
+                max-width:800px;
+                padding:15px;
+                min-height:30px;
+                background:#fff;
+                border: 1px solid black;
+                color: #000;
+                text-align: left;
+                border-radius: 6px;
+                /* Position the tooltip */
+                position: absolute;
+                z-index: 1;
+                word-wrap:break-word;
+            }
+            #treeDiagram {
+                padding-right: 5%;
+                max-width:80%;
+                overflow: scroll;
+            }
+        </style>
+    </head>
+    
+    
+    <div id="treeDiagram"></div>
+
+
+    <apex:includeScript value="{!$Resource.cometd}"/>
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+    <script type="text/javascript">
+        var TreeDiagram = (function() {
+            var margin = {top: 20, right: 190, bottom: 20, left: 80},
+            width = window.innerWidth - margin.right - margin.left,
+            height = window.innerHeight - margin.top - margin.bottom;
+
+            var i = 0;
+            var tree = d3.layout.tree().size([height, width]);
+            var diagonal = d3.svg.diagonal().projection(function(d) { return [d.y, d.x]; });
+
+            // Add tooltip div
+            var tooltipDiv = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 1e-6);
+
+            function updateDiagram(root) {
+
+                d3.select("svg").remove();
+                var svg = d3.select("#treeDiagram")
+                            .append("svg")
+                            .attr("width", width + margin.right + margin.left)
+                            .attr("height", height + margin.top + margin.bottom)
+                            .append("g")
+                            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+                // Compute the new tree layout.
+                var nodes = tree.nodes(root).reverse();
+                links = tree.links(nodes);
+
+                // Normalize for fixed-depth.
+                nodes.forEach(function(d) { d.y = d.depth * 180; });
+
+                // Declare the nodes…
+                var node = svg.selectAll("g.node").data(nodes, function(d) { return d.id || (d.id = ++i); });
+
+                // Enter the nodes.
+                var nodeEnter = node.enter().append("g").attr("class", "node").attr("transform", function(d) {
+                    return "translate(" + d.y + "," + d.x + ")"; 
+                });
+
+                nodeEnter.append("circle")
+                .on("click", function(d) {
+                    if (d.tooltipTitle) {
+                        tooltipClick(d);
+                    }
+                })
+                .on("mouseout", mouseout)
+                .attr("r", 10)
+                .style("fill", function(d) {
+                    return d.color;
+                });
+
+                nodeEnter.append("text").attr("x", function(d) { 
+                    return d.children || d._children ? -13 : 13; 
+                })
+                .attr("y", function(d) { 
+                    return d.name === 'START' ? d.y : -20; 
+                })
+                .attr("dy", ".35em")
+                .attr("text-anchor", function(d) { 
+                    return d.name === 'START' ? "end" : "middle"; 
+                }).text(function(d) { 
+                    return d.name; 
+                }).style("fill-opacity", 1);
+
+                // Declare the links…
+                var link = svg.selectAll("path.link").data(links, function(d) { 
+                    return d.target.id; 
+                });
+
+                // Enter the links.
+                link.enter().insert("path", "g").attr("class", "link").attr("d", diagonal);
+            }
+
+            function tooltipClick(d) {
+                tooltipDiv.transition()
+                .duration(300)
+                .style("opacity", 1);
+
+                tooltipDiv.html(
+                    "<strong>" + d.tooltipTitle + "</strong>" + "<br><br>" +
+                    d.tooltipDetails
+                )
+                .style("left", (d3.event.pageX ) + "px")
+                .style("top", (d3.event.pageY) + "px");
+            }
+
+            function mouseout() {
+                tooltipDiv.transition()
+                .duration(300)
+                .style("opacity", 1e-6);
+            }
+
+            return {
+                update: updateDiagram
+            };
+        }());
+
+        var CometD = (function(treeDiagramInput) {
+            var cometd;
+            var newSubscription;
+            var treeDiagram = treeDiagramInput;
+
+            function init() {
+                cometd = new org.cometd.CometD();
+                var cometdUrl = window.location.protocol + '//' + window.location.hostname + '/cometd/40.0/';
+                cometd.configure({
+                    url: cometdUrl,
+                    requestHeaders: { Authorization: 'OAuth {!$Api.Session_ID}'},
+                    appendMessageTypeToURL : false
+                });
+                cometd.websocketEnabled = false;
+            }
+            
+            function subscribe() {
+                cometd.handshake(function(handshakeReply) {
+                    if (handshakeReply.successful) {
+                        cometd.batch(function() {
+                            newSubscription = cometd.subscribe('/event/TreeDiagram__e',
+                                function(message) {
+                                    console.log(JSON.parse(message.data.payload.Content__c));
+                                    treeDiagram.update(JSON.parse(message.data.payload.Content__c));
+                                }
+                            );
+                        });
+                    }
+                });
+            }
+
+            function unsubscribe() {
+                cometd.unsubscribe(newSubscription);
+            }
+
+            return {
+                init: init,
+                subscribe: subscribe,
+                unsubscribe: unsubscribe
+            };
+        }(TreeDiagram));
+
+        window.onload = function() {
+            CometD.init();
+            CometD.subscribe();
+        }
+        
+        window.onbeforeunload = function() {
+            CometD.unsubscribe();
+        }
+            
+    </script>
+</apex:page>
