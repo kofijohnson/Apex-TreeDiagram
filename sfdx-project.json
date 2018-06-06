@@ -1,0 +1,11 @@
+{
+  "packageDirectories": [
+    {
+      "path": "TreeDiagramLibrary",
+      "default": true
+    }
+  ],
+  "namespace": "",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "sourceApiVersion": "42.0"
+}
