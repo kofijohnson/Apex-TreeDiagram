@@ -2,7 +2,10 @@
   "packageDirectories": [
     {
       "path": "TreeDiagramLibrary",
-      "default": true
+      "default": true,
+      "id": "TREEDIAGRAMLIBRARY_PACKAGE_ID",
+      "versionName": "June 18",
+      "versionNumber": "1.0.0.NEXT"
     }
   ],
   "namespace": "",
